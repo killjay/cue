@@ -96,6 +96,10 @@ function App() {
         // Check if we're in a meeting
         if (configResponse.runningContext === 'inMeeting') {
           await initializeMeetingFeatures();
+        } else {
+          // Set demo mode when not in meeting
+          setRunningContext('Demo Mode - Not in Zoom Meeting');
+          console.log('App loaded outside Zoom meeting - limited functionality');
         }
         
       } catch (error) {
@@ -377,6 +381,18 @@ function App() {
           </div>
           <div className="context-info">
             <p><strong>Running Context:</strong> {runningContext}</p>
+            {!isMeetingConnected && runningContext.includes('Demo') && (
+              <div className="demo-notice">
+                <p>⚠️ <strong>Demo Mode:</strong> For full functionality, install this app in Zoom and launch it during a meeting.</p>
+                <p>📱 <strong>To test properly:</strong></p>
+                <ol>
+                  <li>Update your Zoom App configuration with this URL</li>
+                  <li>Start a Zoom meeting</li>
+                  <li>Click "Apps" in the meeting toolbar</li>
+                  <li>Launch your AI Brainstorm Assistant</li>
+                </ol>
+              </div>
+            )}
             {userContext && (
               <p><strong>User:</strong> {userContext.screenName} ({userContext.role})</p>
             )}

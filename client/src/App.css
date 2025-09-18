@@ -268,3 +268,22 @@ h2, h3 {
     align-items: center;
   }
 }
+
+/* Demo Mode Notice */
+.demo-notice {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 10px 0;
+  color: #856404;
+}
+
+.demo-notice ol {
+  margin: 10px 0 0 20px;
+  padding: 0;
+}
+
+.demo-notice li {
+  margin: 5px 0;
+}
