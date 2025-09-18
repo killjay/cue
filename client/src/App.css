@@ -438,3 +438,18 @@ h2, h3 {
 .active {
   animation: pulse 2s infinite;
 }
+
+.test-button {
+  background: #6f42c1;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 10px;
+  font-size: 14px;
+}
+
+.test-button:hover {
+  background: #5a2d91;
+}
