@@ -1,0 +1,20 @@
+{
+  "name": "zoom-vapi-brainstorm",
+  "version": 2,
+  "buildCommand": "cd client && npm run build",
+  "outputDirectory": "client/build",
+  "installCommand": "cd client && npm install",
+  "framework": "create-react-app",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "env": {
+    "REACT_APP_ZOOM_CLIENT_ID": "B3EgQ2srTYqKlzcicpgE1Q",
+    "REACT_APP_VAPI_PUBLIC_KEY": "4e22bf06-bde8-4fe4-bcc0-e832850501ee",
+    "REACT_APP_VAPI_ASSISTANT_ID": "a4881746-c6ba-4399-a6ce-03b2183168ca",
+    "REACT_APP_NODE_ENV": "production"
+  }
+}
