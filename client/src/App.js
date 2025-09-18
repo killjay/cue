@@ -15,22 +15,7 @@ const BRAINSTORM_ASSISTANT = {
     messages: [
       {
         role: "system",
-        content: `You are an AI brainstorming assistant for Zoom meetings. Your role is to:
-        
-        1. LISTEN to meeting conversations and detect when participants need creative ideas
-        2. ANALYZE discussion context to understand the brainstorming topic
-        3. GENERATE creative, actionable suggestions when asked
-        4. RESPOND with 2-3 concise brainstorming ideas
-        5. ENGAGE naturally in the conversation flow
-        
-        Key behaviors:
-        - Wait for explicit requests like "give us ideas", "help brainstorm", "what do you think"
-        - Detect silence or "stuck" moments in creative discussions  
-        - Provide diverse, creative solutions
-        - Keep responses under 30 seconds
-        - Ask clarifying questions when context is unclear
-        
-        You're here to fill mind blocks and spark creativity!`
+        content: `You are a creative brainstorming assistant. When someone asks for ideas, help with brainstorming, or says they're stuck, provide 2-3 specific, creative, actionable suggestions. Keep responses brief and enthusiastic. Always build on the conversation context.`
       }
     ]
   },
@@ -57,9 +42,6 @@ function App() {
   const [participants, setParticipants] = useState([]);
   const [runningContext, setRunningContext] = useState('');
   const [supportedApis, setSupportedApis] = useState([]);
-  const [isListening, setIsListening] = useState(false);
-  const [conversationBuffer, setConversationBuffer] = useState([]);
-  const [lastSpeakTime, setLastSpeakTime] = useState(Date.now());
 
   // Initialize socket connection
   useEffect(() => {
@@ -317,147 +299,41 @@ function App() {
     };
   }, [socket, isMeetingConnected]);
 
-  // Setup conversation monitoring for brainstorming triggers
-  const setupConversationMonitoring = () => {
-    console.log('🔍 Setting up conversation monitoring...');
-    
-    // Setup Vapi event listeners for conversation flow
-    vapi.on('speech-start', () => {
-      console.log('🗣️ Speech detected');
-    });
-    
-    vapi.on('speech-end', () => {
-      console.log('🔇 Speech ended');
-      setLastSpeakTime(Date.now());
-    });
-    
-    vapi.on('transcript', (transcript) => {
-      console.log('📝 Transcript:', transcript);
-      
-      // Add to conversation buffer
-      const newMessage = {
-        text: transcript.text,
-        speaker: transcript.user || 'Participant',
-        timestamp: Date.now()
-      };
-      
-      setConversationBuffer(prev => {
-        const updated = [...prev, newMessage];
-        // Keep only last 10 messages
-        return updated.slice(-10);
-      });
-      
-      // Check for brainstorming triggers
-      checkForBrainstormingTriggers(transcript.text);
-    });
-    
-    vapi.on('message', (message) => {
-      console.log('💬 Vapi message:', message);
-      
-      // If Vapi generated a brainstorming response, share it with the meeting
-      if (message.type === 'assistant-message' && isMeetingConnected) {
-        shareBrainstormIdea(message.content);
-      }
-    });
-  };
-
-  // Check if conversation contains brainstorming triggers
-  const checkForBrainstormingTriggers = (text) => {
-    const brainstormTriggers = [
-      'stuck', 'blocked', 'ideas', 'brainstorm', 'think', 'suggest',
-      'help', 'creative', 'solution', 'problem', 'challenge', 'what if',
-      'how can we', 'any thoughts', 'opinions', 'feedback'
-    ];
-    
-    const lowerText = text.toLowerCase();
-    const hasTrigger = brainstormTriggers.some(trigger => lowerText.includes(trigger));
-    
-    if (hasTrigger) {
-      console.log('🧠 Brainstorming trigger detected in:', text);
-      
-      // Add context to Vapi for response generation
-      const contextMessage = `Context: "${text}" - Please provide creative brainstorming ideas.`;
-      
-      // Send context to Vapi for processing
-      if (isVapiConnected) {
-        vapi.send({
-          type: 'add-message',
-          message: {
-            role: 'user',
-            content: contextMessage
-          }
-        });
-      }
-    }
-  };
-
-  // Share brainstorming idea with meeting participants
-  const shareBrainstormIdea = async (idea) => {
-    try {
-      console.log('💡 Sharing brainstorm idea:', idea);
-      
-      if (isMeetingConnected && zoomSdk) {
-        // Send message to Zoom chat
-        await zoomSdk.sendMessage({
-          message: `🧠 AI Brainstorm: ${idea}`,
-          userId: 'all'
-        });
-        
-        console.log('✅ Brainstorm idea shared with meeting');
-      }
-    } catch (error) {
-      console.error('❌ Failed to share brainstorm idea:', error);
-    }
-  };
-
-  // Start Vapi brainstorming session with conversation listening
+  // Simple Vapi brainstorming - just start listening and responding
   const startVapiBrainstorm = async () => {
     try {
-      console.log('🎤 Starting Vapi.ai brainstorming session...');
+      console.log('🎤 Starting Vapi brainstorming assistant...');
       
-      // Start Vapi call with brainstorming assistant
-      await vapi.start(process.env.REACT_APP_VAPI_ASSISTANT_ID || 'a4881746-c6ba-4399-a6ce-03b2183168ca', {
-        ...BRAINSTORM_ASSISTANT,
-        recordingEnabled: false,
-        variableValues: {
-          meetingTopic: meetingContext?.meetingTopic || 'General Discussion',
-          participantCount: participants.length,
-          userName: userContext?.screenName || 'User'
-        }
-      });
+      // Start Vapi with simple configuration
+      await vapi.start(process.env.REACT_APP_VAPI_ASSISTANT_ID || 'a4881746-c6ba-4399-a6ce-03b2183168ca');
       
       setIsVapiConnected(true);
-      setIsListening(true);
-      console.log('✅ Vapi brainstorming session started');
+      console.log('✅ Vapi brainstorming started - I can hear you and help brainstorm!');
       
-      // Setup conversation monitoring
-      setupConversationMonitoring();
-      
-      // Show notification to meeting participants
-      if (isMeetingConnected) {
-        await zoomSdk.showNotification({
-          type: 'info',
-          title: 'AI Brainstorm Assistant',
-          message: 'AI is now listening and ready to help brainstorm ideas!',
-          duration: 5000
-        });
-      }
+      // Simple event logging
+      vapi.on('call-start', () => console.log('🎉 Call started'));
+      vapi.on('call-end', () => console.log('📞 Call ended'));
+      vapi.on('speech-start', () => console.log('🗣️ Someone is speaking'));
+      vapi.on('speech-end', () => console.log('🔇 Speech ended'));
+      vapi.on('transcript', (transcript) => {
+        console.log('📝 Transcript:', transcript);
+      });
       
     } catch (error) {
-      console.error('❌ Failed to start Vapi brainstorming:', error);
+      console.error('❌ Failed to start Vapi:', error);
+      alert('Failed to start brainstorming assistant. Please check your internet connection.');
     }
   };
 
-  // Stop Vapi brainstorming session
+  // Stop Vapi brainstorming
   const stopVapiBrainstorm = () => {
     try {
-      console.log('⏹️ Stopping Vapi.ai brainstorming session...');
+      console.log('⏹️ Stopping Vapi brainstorming...');
       vapi.stop();
       setIsVapiConnected(false);
-      setIsListening(false);
-      console.log('✅ Vapi session stopped');
+      console.log('✅ Vapi stopped');
     } catch (error) {
-      console.error('❌ Failed to stop Vapi session:', error);
+      console.error('❌ Failed to stop Vapi:', error);
     }
   };
 
@@ -594,18 +470,10 @@ function App() {
           <h2>AI Brainstorm Assistant</h2>
           <div className="assistant-controls">
             <button 
-              onClick={startVapiBrainstorm}
-              disabled={!isMeetingConnected || isVapiConnected}
-              className="talk-button"
+              onClick={isVapiConnected ? stopVapiBrainstorm : startVapiBrainstorm}
+              className={isVapiConnected ? "stop-button" : "talk-button"}
             >
-              🎤 Start Brainstorming
-            </button>
-            <button 
-              onClick={stopVapiBrainstorm}
-              disabled={!isVapiConnected}
-              className="stop-button"
-            >
-              ⏹️ Stop Assistant
+              {isVapiConnected ? '⏹️ Stop Brainstorming' : '🎤 Start Brainstorming'}
             </button>
           </div>
           
