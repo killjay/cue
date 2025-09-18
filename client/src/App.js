@@ -7,7 +7,7 @@ import './App.css';
 // Initialize Vapi client with environment variable
 const vapi = new Vapi(process.env.REACT_APP_VAPI_PUBLIC_KEY || '4e22bf06-bde8-4fe4-bcc0-e832850501ee');
 
-// Brainstorming assistant configuration
+// Enhanced brainstorming assistant configuration
 const BRAINSTORM_ASSISTANT = {
   model: {
     provider: "openai",
@@ -15,7 +15,12 @@ const BRAINSTORM_ASSISTANT = {
     messages: [
       {
         role: "system",
-        content: `You are a creative brainstorming assistant. When someone asks for ideas, help with brainstorming, or says they're stuck, provide 2-3 specific, creative, actionable suggestions. Keep responses brief and enthusiastic. Always build on the conversation context.`
+        content: `You are a meeting assistant that:
+        1. LISTENS to conversations and captures them as meeting transcripts
+        2. ANALYZES the discussion context and topics
+        3. AUTOMATICALLY generates creative brainstorming suggestions based on what was discussed
+        
+        When you hear conversations, convert them into clear meeting notes and then provide 3-5 specific, actionable brainstorming ideas that build on the discussion.`
       }
     ]
   },
@@ -37,6 +42,8 @@ function App() {
   const [meetingTranscripts, setMeetingTranscripts] = useState([]);
   const [brainstormSuggestions, setBrainstormSuggestions] = useState([]);
   const [socket, setSocket] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [meetingContext, setMeetingContext] = useState(null);
   const [userContext, setUserContext] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -299,29 +306,164 @@ function App() {
     };
   }, [socket, isMeetingConnected]);
 
-  // Simple Vapi brainstorming - just start listening and responding
+  // Generate live brainstorming suggestions as conversation happens
+  const generateLiveSuggestions = async (latestMessage) => {
+    try {
+      if (conversationHistory.length < 2) return;
+      
+      console.log('🧠 Generating live brainstorming suggestions...');
+      
+      const conversationSummary = conversationHistory
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.text)
+        .join(' | ');
+      
+      const promptForSuggestions = `Meeting conversation so far: "${conversationSummary}". Latest: "${latestMessage}". Provide 3 specific brainstorming ideas to advance this discussion.`;
+      
+      // Send brainstorming request to Vapi
+      await vapi.send({
+        type: 'add-message',
+        message: {
+          role: 'user',
+          content: promptForSuggestions
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Failed to generate live suggestions:', error);
+    }
+  };
+
+  // Parse AI brainstorming suggestions from response
+  const parseBrainstormingSuggestions = (aiResponse) => {
+    try {
+      console.log('📋 Parsing brainstorming suggestions from AI...');
+      
+      // Split response into individual suggestions
+      const suggestions = aiResponse
+        .split(/\d+\.|\n|\|/)
+        .map(s => s.trim())
+        .filter(s => s.length > 10 && !s.toLowerCase().includes('brainstorm'));
+      
+      if (suggestions.length > 0) {
+        setBrainstormSuggestions(prev => [...prev, ...suggestions.slice(0, 3)]);
+        console.log('✅ Added brainstorming suggestions:', suggestions);
+      }
+    } catch (error) {
+      console.error('❌ Failed to parse suggestions:', error);
+    }
+  };
+
+  // Generate contextual brainstorming suggestions based on conversation
+  const generateContextualSuggestions = async () => {
+    if (conversationHistory.length === 0) return;
+    
+    setIsAnalyzing(true);
+    setBrainstormSuggestions([]);
+    
+    try {
+      console.log('🧠 Analyzing conversation for brainstorming suggestions...');
+      
+      // Create conversation summary
+      const userMessages = conversationHistory
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.text)
+        .join(' ');
+      
+      // Use Vapi to generate contextual suggestions
+      const contextPrompt = `Based on this conversation: "${userMessages}", provide 3-5 specific, creative brainstorming ideas that could help solve problems, spark innovation, or explore new directions discussed. Format as numbered list.`;
+      
+      // Send to Vapi for analysis
+      await vapi.send({
+        type: 'add-message',
+        message: {
+          role: 'user',
+          content: contextPrompt
+        }
+      });
+      
+      // Listen for the brainstorming response
+      vapi.on('message', (message) => {
+        if (message.type === 'transcript' && message.role === 'assistant') {
+          const suggestions = message.text.split('\n').filter(line => line.trim());
+          setBrainstormSuggestions(suggestions);
+          setIsAnalyzing(false);
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Failed to generate suggestions:', error);
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Manual trigger for generating suggestions
+  const analyzeMeetingContext = async () => {
+    await generateContextualSuggestions();
+  };
+
+  // Enhanced Vapi: Listen → Transcript → Auto-Brainstorm
   const startVapiBrainstorm = async () => {
     try {
-      console.log('🎤 Starting Vapi brainstorming assistant...');
+      console.log('🎤 Starting Vapi: Listen → Transcript → Brainstorm...');
       
-      // Start Vapi with simple configuration
+      // Start Vapi with enhanced configuration
       await vapi.start(process.env.REACT_APP_VAPI_ASSISTANT_ID || 'a4881746-c6ba-4399-a6ce-03b2183168ca');
       
       setIsVapiConnected(true);
-      console.log('✅ Vapi brainstorming started - I can hear you and help brainstorm!');
+      setConversationHistory([]); // Reset conversation
+      setBrainstormSuggestions([]); // Reset suggestions
       
-      // Simple event logging
-      vapi.on('call-start', () => console.log('🎉 Call started'));
-      vapi.on('call-end', () => console.log('📞 Call ended'));
-      vapi.on('speech-start', () => console.log('🗣️ Someone is speaking'));
-      vapi.on('speech-end', () => console.log('🔇 Speech ended'));
+      console.log('✅ Vapi listening - Will convert speech to meeting notes and generate brainstorming ideas!');
+      
+      // Enhanced event handling
+      vapi.on('call-start', () => {
+        console.log('🎉 Meeting transcription started');
+      });
+      
+      vapi.on('call-end', () => {
+        console.log('📞 Call ended - Generating final brainstorming suggestions');
+        setTimeout(() => generateContextualSuggestions(), 1000);
+      });
+      
       vapi.on('transcript', (transcript) => {
-        console.log('📝 Transcript:', transcript);
+        console.log('📝 Speech → Transcript:', transcript);
+        
+        // Add to meeting conversation transcript
+        const meetingNote = {
+          speaker: transcript.role === 'user' ? 'Participant' : 'AI Assistant',
+          text: transcript.text,
+          timestamp: new Date().toLocaleTimeString(),
+          role: transcript.role
+        };
+        
+        // Update conversation history (for AI analysis)
+        setConversationHistory(prev => [...prev, meetingNote]);
+        
+        // Update meeting transcripts (for display)
+        setMeetingTranscripts(prev => [...prev, {
+          speaker: meetingNote.speaker,
+          message: meetingNote.text,
+          timestamp: meetingNote.timestamp
+        }]);
+        
+        // Auto-generate suggestions after collecting some conversation
+        if (conversationHistory.length > 2 && transcript.role === 'user') {
+          setTimeout(() => generateLiveSuggestions(transcript.text), 2000);
+        }
+      });
+      
+      vapi.on('message', (message) => {
+        console.log('💬 AI Response:', message);
+        if (message.type === 'assistant-message') {
+          // Parse AI brainstorming suggestions
+          parseBrainstormingSuggestions(message.content);
+        }
       });
       
     } catch (error) {
       console.error('❌ Failed to start Vapi:', error);
-      alert('Failed to start brainstorming assistant. Please check your internet connection.');
+      alert('Failed to start meeting assistant. Please check your internet connection.');
     }
   };
 
@@ -467,17 +609,78 @@ function App() {
 
         {/* AI Assistant Controls */}
         <section className="assistant-section">
-          <h2>AI Brainstorm Assistant</h2>
+          <h2>🎤 AI Meeting Assistant</h2>
+          <p className="workflow-description">
+            🗣️ <strong>Talk</strong> → 📝 <strong>Transcript</strong> → 🧠 <strong>Brainstorm Ideas</strong>
+          </p>
+          
           <div className="assistant-controls">
             <button 
               onClick={isVapiConnected ? stopVapiBrainstorm : startVapiBrainstorm}
-              className={isVapiConnected ? "stop-button" : "talk-button"}
+              className={isVapiConnected ? "stop-button active" : "talk-button"}
             >
-              {isVapiConnected ? '⏹️ Stop Brainstorming' : '🎤 Start Brainstorming'}
+              {isVapiConnected ? '⏹️ Stop Meeting Assistant' : '🎤 Start Meeting Assistant'}
             </button>
+            
+            {conversationHistory.length > 0 && (
+              <button 
+                onClick={analyzeMeetingContext}
+                className="analyze-button"
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? '🔄 Analyzing...' : '🧠 Generate More Ideas'}
+              </button>
+            )}
           </div>
-          
-          {/* Transcription Controls */}
+
+          {/* Live Status */}
+          {isVapiConnected && (
+            <div className="live-status">
+              <span className="listening-indicator">🔴 LIVE - Listening and generating ideas...</span>
+            </div>
+          )}
+
+          {/* Meeting Transcript */}
+          {conversationHistory.length > 0 && (
+            <div className="conversation-section">
+              <h3>📝 Meeting Conversation</h3>
+              <div className="conversation-history">
+                {conversationHistory.map((message, index) => (
+                  <div key={index} className={`message ${message.role}`}>
+                    <span className="speaker">{message.speaker} ({message.timestamp}):</span>
+                    <span className="text">{message.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI Brainstorming Suggestions */}
+          {brainstormSuggestions.length > 0 && (
+            <div className="suggestions-section">
+              <h3>💡 AI Brainstorming Suggestions</h3>
+              <div className="suggestions-list">
+                {brainstormSuggestions.map((suggestion, index) => (
+                  <div key={index} className="suggestion-item">
+                    <span className="suggestion-number">{index + 1}.</span>
+                    <span className="suggestion-text">{suggestion}</span>
+                  </div>
+                ))}
+              </div>
+              <button 
+                onClick={() => setBrainstormSuggestions([])} 
+                className="clear-suggestions"
+              >
+                🗑️ Clear Suggestions
+              </button>
+            </div>
+          )}
+        </section>
+        </section>
+
+        {/* Transcription Controls */}
+        <section className="transcription-section">
+          <h2>📝 Meeting Transcription</h2>
           <div className="transcription-controls">
             <button 
               onClick={startRealTimeTranscription}

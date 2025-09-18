@@ -287,3 +287,154 @@ h2, h3 {
 .demo-notice li {
   margin: 5px 0;
 }
+
+/* Enhanced Meeting Assistant Styles */
+.workflow-description {
+  background: #f0f8ff;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  text-align: center;
+  border-left: 4px solid #007acc;
+}
+
+.live-status {
+  background: #ff4444;
+  color: white;
+  padding: 8px;
+  border-radius: 4px;
+  text-align: center;
+  margin: 10px 0;
+  animation: pulse 2s infinite;
+}
+
+.listening-indicator {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.conversation-section {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+  border: 1px solid #e9ecef;
+}
+
+.conversation-history {
+  max-height: 300px;
+  overflow-y: auto;
+  background: white;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.message {
+  margin: 8px 0;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #007acc;
+}
+
+.message.user {
+  border-left-color: #28a745;
+  background: #f8fff8;
+}
+
+.message.assistant {
+  border-left-color: #ffc107;
+  background: #fffdf0;
+}
+
+.speaker {
+  font-weight: bold;
+  color: #333;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.text {
+  color: #555;
+  line-height: 1.4;
+}
+
+.suggestions-section {
+  background: #e8f5e8;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+  border: 1px solid #c3e6cb;
+}
+
+.suggestions-list {
+  background: white;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.suggestion-item {
+  margin: 10px 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid #28a745;
+  display: flex;
+  align-items: flex-start;
+}
+
+.suggestion-number {
+  font-weight: bold;
+  color: #28a745;
+  margin-right: 8px;
+  min-width: 20px;
+}
+
+.suggestion-text {
+  color: #333;
+  line-height: 1.4;
+}
+
+.clear-suggestions {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.clear-suggestions:hover {
+  background: #c82333;
+}
+
+.analyze-button {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 10px;
+  font-size: 14px;
+}
+
+.analyze-button:hover {
+  background: #138496;
+}
+
+.analyze-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.active {
+  animation: pulse 2s infinite;
+}
