@@ -152,23 +152,45 @@ function App() {
     try {
       console.log('🔧 Starting meeting features initialization...');
       
-      // Get meeting context
+      // Get meeting context with better error handling
       console.log('📋 Getting meeting context...');
-      const meetingContextResponse = await zoomSdk.getMeetingContext();
-      console.log('📋 Meeting context response:', meetingContextResponse);
-      setMeetingContext(meetingContextResponse);
-      setIsMeetingConnected(true);
+      try {
+        const meetingContextResponse = await zoomSdk.getMeetingContext();
+        console.log('📋 Meeting context response:', meetingContextResponse);
+        setMeetingContext(meetingContextResponse);
+        
+        // Check if we're actually in a meeting
+        if (meetingContextResponse && (meetingContextResponse.meetingID || meetingContextResponse.meetingUUID)) {
+          setIsMeetingConnected(true);
+          console.log('✅ Successfully connected to meeting:', meetingContextResponse.meetingID || meetingContextResponse.meetingUUID);
+        } else {
+          console.log('ℹ️ No active meeting detected');
+          setIsMeetingConnected(false);
+        }
+      } catch (meetingError) {
+        console.log('⚠️ Could not get meeting context:', meetingError);
+        setIsMeetingConnected(false);
+        // Continue without meeting context - app can work standalone
+      }
       
       // Get user context
       console.log('👤 Getting user context...');
-      const userContextResponse = await zoomSdk.getUserContext();
-      console.log('👤 User context response:', userContextResponse);
-      setUserContext(userContextResponse);
-      
-      // Get meeting participants (if host/co-host)
-      if (userContextResponse.role === 'host' || userContextResponse.role === 'coHost') {
-        const participantsResponse = await zoomSdk.getMeetingParticipants();
-        setParticipants(participantsResponse.participants);
+      try {
+        const userContextResponse = await zoomSdk.getUserContext();
+        console.log('👤 User context response:', userContextResponse);
+        setUserContext(userContextResponse);
+        
+        // Get meeting participants (if host/co-host)
+        if (userContextResponse.role === 'host' || userContextResponse.role === 'coHost') {
+          try {
+            const participantsResponse = await zoomSdk.getMeetingParticipants();
+            setParticipants(participantsResponse.participants);
+          } catch (participantsError) {
+            console.log('ℹ️ Could not get participants:', participantsError);
+          }
+        }
+      } catch (userError) {
+        console.log('⚠️ Could not get user context:', userError);
       }
       
       // Set up event listeners
@@ -177,7 +199,7 @@ function App() {
       // Connect for app-to-app communication
       try {
         await zoomSdk.connect();
-        console.log('Connected for app communication');
+        console.log('✅ Connected for app communication');
       } catch (error) {
         console.log('App communication not available:', error);
       }
@@ -309,25 +331,38 @@ function App() {
   // Generate live brainstorming suggestions as conversation happens
   const generateLiveSuggestions = async (latestMessage) => {
     try {
-      if (conversationHistory.length < 2) return;
+      console.log('🧠 Generating live brainstorming suggestions for:', latestMessage);
       
-      console.log('🧠 Generating live brainstorming suggestions...');
-      
-      const conversationSummary = conversationHistory
-        .filter(msg => msg.role === 'user')
-        .map(msg => msg.text)
-        .join(' | ');
-      
-      const promptForSuggestions = `Meeting conversation so far: "${conversationSummary}". Latest: "${latestMessage}". Provide 3 specific brainstorming ideas to advance this discussion.`;
-      
-      // Send brainstorming request to Vapi
-      await vapi.send({
-        type: 'add-message',
-        message: {
-          role: 'user',
-          content: promptForSuggestions
+      // Wait a bit to ensure conversation history is updated
+      setTimeout(async () => {
+        const userMessages = conversationHistory
+          .filter(msg => msg.role === 'user')
+          .map(msg => msg.text)
+          .slice(-5) // Get last 5 user messages
+          .join(' | ');
+        
+        if (userMessages.length < 10) {
+          console.log('ℹ️ Not enough conversation content yet');
+          return;
         }
-      });
+        
+        console.log('📊 Conversation summary for brainstorming:', userMessages);
+        
+        const promptForSuggestions = `Based on this meeting conversation: "${userMessages}". Please provide 3 specific, creative brainstorming ideas that could help solve problems or explore new directions mentioned in this discussion. Format as: 1. [idea] 2. [idea] 3. [idea]`;
+        
+        console.log('📤 Sending brainstorming request to Vapi...');
+        
+        // Send brainstorming request to Vapi
+        if (isVapiConnected) {
+          await vapi.send({
+            type: 'add-message',
+            message: {
+              role: 'user',
+              content: promptForSuggestions
+            }
+          });
+        }
+      }, 1000);
       
     } catch (error) {
       console.error('❌ Failed to generate live suggestions:', error);
@@ -337,17 +372,45 @@ function App() {
   // Parse AI brainstorming suggestions from response
   const parseBrainstormingSuggestions = (aiResponse) => {
     try {
-      console.log('📋 Parsing brainstorming suggestions from AI...');
+      console.log('📋 Parsing brainstorming suggestions from AI response:', aiResponse);
       
-      // Split response into individual suggestions
-      const suggestions = aiResponse
-        .split(/\d+\.|\n|\|/)
-        .map(s => s.trim())
-        .filter(s => s.length > 10 && !s.toLowerCase().includes('brainstorm'));
+      if (!aiResponse || typeof aiResponse !== 'string') {
+        console.log('⚠️ Invalid AI response for parsing');
+        return;
+      }
+      
+      // Split response into individual suggestions - try multiple formats
+      let suggestions = [];
+      
+      // Try numbered list format first
+      const numberedSuggestions = aiResponse.match(/\d+\.\s*([^.]+(?:\.[^0-9][^.]*)*)/g);
+      if (numberedSuggestions) {
+        suggestions = numberedSuggestions.map(s => s.replace(/^\d+\.\s*/, '').trim());
+      } else {
+        // Try line breaks
+        suggestions = aiResponse
+          .split(/\n+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 15 && !s.toLowerCase().includes('brainstorm'));
+      }
+      
+      // Clean up suggestions
+      suggestions = suggestions
+        .filter(s => s.length > 10)
+        .slice(0, 5) // Limit to 5 suggestions
+        .map(s => s.replace(/^[-•*]\s*/, '').trim()); // Remove bullet points
       
       if (suggestions.length > 0) {
-        setBrainstormSuggestions(prev => [...prev, ...suggestions.slice(0, 3)]);
-        console.log('✅ Added brainstorming suggestions:', suggestions);
+        console.log('✅ Parsed suggestions:', suggestions);
+        setBrainstormSuggestions(prev => {
+          // Avoid duplicates
+          const newSuggestions = suggestions.filter(newSug => 
+            !prev.some(existingSug => existingSug.toLowerCase() === newSug.toLowerCase())
+          );
+          return [...prev, ...newSuggestions];
+        });
+      } else {
+        console.log('⚠️ No valid suggestions found in response');
       }
     } catch (error) {
       console.error('❌ Failed to parse suggestions:', error);
@@ -407,8 +470,20 @@ function App() {
     try {
       console.log('🎤 Starting Vapi: Listen → Transcript → Brainstorm...');
       
-      // Start Vapi with enhanced configuration
-      await vapi.start(process.env.REACT_APP_VAPI_ASSISTANT_ID || 'a4881746-c6ba-4399-a6ce-03b2183168ca');
+      // Use the correct assistant ID and configuration
+      const assistantConfig = {
+        assistantId: process.env.REACT_APP_VAPI_ASSISTANT_ID || 'a4881746-c6ba-4399-a6ce-03b2183168ca',
+        ...BRAINSTORM_ASSISTANT
+      };
+      
+      console.log('🔧 Vapi configuration:', assistantConfig);
+      
+      // Start Vapi call
+      await vapi.start(assistantConfig.assistantId, {
+        model: assistantConfig.model,
+        voice: assistantConfig.voice,
+        transcriber: assistantConfig.transcriber
+      });
       
       setIsVapiConnected(true);
       setConversationHistory([]); // Reset conversation
@@ -416,29 +491,41 @@ function App() {
       
       console.log('✅ Vapi listening - Will convert speech to meeting notes and generate brainstorming ideas!');
       
-      // Enhanced event handling
+      // Enhanced event handling with detailed logging
       vapi.on('call-start', () => {
-        console.log('🎉 Meeting transcription started');
+        console.log('🎉 Vapi call started - Listening for conversations...');
       });
       
       vapi.on('call-end', () => {
-        console.log('📞 Call ended - Generating final brainstorming suggestions');
+        console.log('📞 Vapi call ended - Generating final brainstorming suggestions');
         setTimeout(() => generateContextualSuggestions(), 1000);
       });
       
       vapi.on('transcript', (transcript) => {
-        console.log('📝 Speech → Transcript:', transcript);
+        console.log('📝 Speech → Transcript received:', transcript);
+        
+        // Ensure transcript has required properties
+        if (!transcript || !transcript.text) {
+          console.log('⚠️ Invalid transcript received:', transcript);
+          return;
+        }
         
         // Add to meeting conversation transcript
         const meetingNote = {
           speaker: transcript.role === 'user' ? 'Participant' : 'AI Assistant',
           text: transcript.text,
           timestamp: new Date().toLocaleTimeString(),
-          role: transcript.role
+          role: transcript.role || 'user'
         };
         
+        console.log('➕ Adding to conversation:', meetingNote);
+        
         // Update conversation history (for AI analysis)
-        setConversationHistory(prev => [...prev, meetingNote]);
+        setConversationHistory(prev => {
+          const updated = [...prev, meetingNote];
+          console.log('📊 Updated conversation history:', updated);
+          return updated;
+        });
         
         // Update meeting transcripts (for display)
         setMeetingTranscripts(prev => [...prev, {
@@ -448,22 +535,27 @@ function App() {
         }]);
         
         // Auto-generate suggestions after collecting some conversation
-        if (conversationHistory.length > 2 && transcript.role === 'user') {
+        if (transcript.role === 'user' && transcript.text.length > 10) {
+          console.log('🧠 Triggering brainstorming suggestions...');
           setTimeout(() => generateLiveSuggestions(transcript.text), 2000);
         }
       });
       
       vapi.on('message', (message) => {
-        console.log('💬 AI Response:', message);
-        if (message.type === 'assistant-message') {
-          // Parse AI brainstorming suggestions
+        console.log('💬 Vapi message received:', message);
+        if (message && message.type === 'assistant-message' && message.content) {
+          console.log('🤖 AI Response received, parsing suggestions...');
           parseBrainstormingSuggestions(message.content);
         }
       });
       
+      vapi.on('error', (error) => {
+        console.error('❌ Vapi error:', error);
+      });
+      
     } catch (error) {
       console.error('❌ Failed to start Vapi:', error);
-      alert('Failed to start meeting assistant. Please check your internet connection.');
+      alert(`Failed to start meeting assistant: ${error.message}`);
     }
   };
 
@@ -620,6 +712,27 @@ function App() {
               className={isVapiConnected ? "stop-button active" : "talk-button"}
             >
               {isVapiConnected ? '⏹️ Stop Meeting Assistant' : '🎤 Start Meeting Assistant'}
+            </button>
+            
+            {/* Test Mode for debugging */}
+            <button 
+              onClick={() => {
+                // Add test conversation
+                const testConversation = [
+                  { speaker: 'Participant', text: 'We need to improve our user engagement', timestamp: new Date().toLocaleTimeString(), role: 'user' },
+                  { speaker: 'Participant', text: 'Our current retention rate is low', timestamp: new Date().toLocaleTimeString(), role: 'user' },
+                  { speaker: 'Participant', text: 'What creative solutions can we explore?', timestamp: new Date().toLocaleTimeString(), role: 'user' }
+                ];
+                setConversationHistory(testConversation);
+                setBrainstormSuggestions([
+                  'Implement gamification elements like points and badges to increase user engagement',
+                  'Create personalized onboarding flows based on user preferences and behavior',
+                  'Develop a community feature where users can share experiences and tips'
+                ]);
+              }}
+              className="test-button"
+            >
+              🧪 Test Mode (Demo Conversation)
             </button>
             
             {conversationHistory.length > 0 && (
