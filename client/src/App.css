@@ -453,3 +453,14 @@ h2, h3 {
 .test-button:hover {
   background: #5a2d91;
 }
+
+.live-transcript {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 5px 10px;
+  border-radius: 4px;
+  margin-top: 8px;
+  font-style: italic;
+  font-size: 13px;
+  max-width: 100%;
+  word-wrap: break-word;
+}

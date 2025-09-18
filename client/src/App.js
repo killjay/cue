@@ -44,6 +44,9 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState(null);
+  const [transcript, setTranscript] = useState('');
   const [meetingContext, setMeetingContext] = useState(null);
   const [userContext, setUserContext] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -74,7 +77,88 @@ function App() {
     return () => newSocket.close();
   }, []);
 
-  // Initialize Zoom Apps SDK
+    // Initialize Chrome Speech Recognition
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      recognition.maxAlternatives = 1;
+      
+      recognition.onstart = () => {
+        console.log('🎤 Chrome Speech Recognition started');
+        setIsListening(true);
+      };
+      
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        if (finalTranscript) {
+          console.log('📝 Final transcript:', finalTranscript);
+          addToConversation(finalTranscript);
+        }
+        
+        setTranscript(finalTranscript + interimTranscript);
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('❌ Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+      
+      recognition.onend = () => {
+        console.log('🔇 Speech recognition ended');
+        setIsListening(false);
+      };
+      
+      setSpeechRecognition(recognition);
+      console.log('✅ Chrome Speech Recognition initialized');
+    } else {
+      console.warn('⚠️ Speech Recognition not supported in this browser');
+    }
+  }, []);
+
+  // Add conversation to history and trigger brainstorming
+  const addToConversation = (text) => {
+    if (!text || text.trim().length < 3) return;
+    
+    const newMessage = {
+      speaker: 'Participant',
+      text: text.trim(),
+      timestamp: new Date().toLocaleTimeString(),
+      role: 'user'
+    };
+    
+    console.log('➕ Adding to conversation:', newMessage);
+    
+    setConversationHistory(prev => [...prev, newMessage]);
+    setMeetingTranscripts(prev => [...prev, {
+      speaker: newMessage.speaker,
+      message: newMessage.text,
+      timestamp: newMessage.timestamp
+    }]);
+    
+    // Auto-generate brainstorming suggestions after collecting conversation
+    if (text.length > 10) {
+      setTimeout(() => generateAIBrainstormingSuggestions(text), 2000);
+    }
+  };
+
+  // Initialize Zoom SDK
   useEffect(() => {
     const configureZoomApp = async () => {
       try {
@@ -703,15 +787,15 @@ function App() {
         <section className="assistant-section">
           <h2>🎤 AI Meeting Assistant</h2>
           <p className="workflow-description">
-            🗣️ <strong>Talk</strong> → 📝 <strong>Transcript</strong> → 🧠 <strong>Brainstorm Ideas</strong>
+            🗣️ <strong>Talk</strong> → 📝 <strong>Chrome Transcription</strong> → 🧠 <strong>AI Brainstorm Ideas</strong>
           </p>
           
           <div className="assistant-controls">
             <button 
-              onClick={isVapiConnected ? stopVapiBrainstorm : startVapiBrainstorm}
+              onClick={isVapiConnected ? stopChromeTranscription : startChromeTranscription}
               className={isVapiConnected ? "stop-button active" : "talk-button"}
             >
-              {isVapiConnected ? '⏹️ Stop Meeting Assistant' : '🎤 Start Meeting Assistant'}
+              {isVapiConnected ? '⏹️ Stop Meeting Assistant' : '🎤 Start Chrome Transcription'}
             </button>
             
             {/* Test Mode for debugging */}
@@ -737,7 +821,7 @@ function App() {
             
             {conversationHistory.length > 0 && (
               <button 
-                onClick={analyzeMeetingContext}
+                onClick={generateAIBrainstormingSuggestions}
                 className="analyze-button"
                 disabled={isAnalyzing}
               >
@@ -749,7 +833,14 @@ function App() {
           {/* Live Status */}
           {isVapiConnected && (
             <div className="live-status">
-              <span className="listening-indicator">🔴 LIVE - Listening and generating ideas...</span>
+              <span className="listening-indicator">
+                🔴 LIVE - Chrome is listening and generating ideas...
+                {isListening && transcript && (
+                  <div className="live-transcript">
+                    💬 "{transcript}"
+                  </div>
+                )}
+              </span>
             </div>
           )}
 
