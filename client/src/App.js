@@ -83,13 +83,14 @@ function App() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
       
+      // Optimized settings for conversation capture
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
       recognition.maxAlternatives = 1;
       
       recognition.onstart = () => {
-        console.log('🎤 Chrome Speech Recognition started');
+        console.log('🎤 Chrome Speech Recognition started - Listening to conversation...');
         setIsListening(true);
       };
       
@@ -97,64 +98,224 @@ function App() {
         let finalTranscript = '';
         let interimTranscript = '';
         
+        // Process all speech results
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
+            console.log('📝 Final speech captured:', transcript);
           } else {
             interimTranscript += transcript;
           }
         }
         
-        if (finalTranscript) {
-          console.log('📝 Final transcript:', finalTranscript);
-          addToConversation(finalTranscript);
-        }
-        
+        // Update live transcript display
         setTranscript(finalTranscript + interimTranscript);
+        
+        // Add completed sentences to conversation
+        if (finalTranscript && finalTranscript.trim().length > 3) {
+          addToConversation(finalTranscript.trim());
+        }
       };
       
       recognition.onerror = (event) => {
         console.error('❌ Speech recognition error:', event.error);
-        setIsListening(false);
+        if (event.error === 'no-speech') {
+          console.log('ℹ️ No speech detected, continuing to listen...');
+        } else if (event.error === 'network') {
+          console.log('⚠️ Network error, but continuing with offline recognition...');
+        } else {
+          setIsListening(false);
+        }
       };
       
       recognition.onend = () => {
         console.log('🔇 Speech recognition ended');
         setIsListening(false);
+        
+        // Auto-restart if we're supposed to be listening
+        if (isVapiConnected) {
+          console.log('🔄 Auto-restarting speech recognition...');
+          setTimeout(() => {
+            try {
+              recognition.start();
+            } catch (e) {
+              console.log('ℹ️ Could not restart recognition:', e.message);
+            }
+          }, 100);
+        }
       };
       
       setSpeechRecognition(recognition);
-      console.log('✅ Chrome Speech Recognition initialized');
+      console.log('✅ Chrome Speech Recognition initialized for conversation capture');
     } else {
-      console.warn('⚠️ Speech Recognition not supported in this browser');
+      console.warn('⚠️ Speech Recognition not supported in this browser - please use Chrome');
     }
-  }, []);
+  }, [isVapiConnected]);
 
-  // Add conversation to history and trigger brainstorming
+  // Add conversation to history and trigger contextual brainstorming
   const addToConversation = (text) => {
-    if (!text || text.trim().length < 3) return;
+    if (!text || text.trim().length < 5) return;
+    
+    const cleanText = text.trim();
+    console.log('➕ Adding conversation segment:', cleanText);
     
     const newMessage = {
       speaker: 'Participant',
-      text: text.trim(),
+      text: cleanText,
       timestamp: new Date().toLocaleTimeString(),
       role: 'user'
     };
     
-    console.log('➕ Adding to conversation:', newMessage);
+    // Update conversation history
+    setConversationHistory(prev => {
+      const updated = [...prev, newMessage];
+      console.log('📊 Updated conversation history:', updated.map(m => m.text).join(' | '));
+      return updated;
+    });
     
-    setConversationHistory(prev => [...prev, newMessage]);
+    // Update meeting transcripts for display
     setMeetingTranscripts(prev => [...prev, {
       speaker: newMessage.speaker,
       message: newMessage.text,
       timestamp: newMessage.timestamp
     }]);
     
-    // Auto-generate brainstorming suggestions after collecting conversation
-    if (text.length > 10) {
-      setTimeout(() => generateAIBrainstormingSuggestions(text), 2000);
+    // Generate contextual brainstorming suggestions
+    setTimeout(() => generateContextualAI(cleanText), 1500);
+  };
+
+  // Generate contextual AI suggestions based on real conversation
+  const generateContextualAI = async (latestText) => {
+    try {
+      console.log('🧠 Analyzing conversation context for brainstorming...', latestText);
+      
+      // Get full conversation context
+      const fullConversation = conversationHistory
+        .map(msg => msg.text)
+        .join(' ');
+      
+      const contextToAnalyze = fullConversation + ' ' + latestText;
+      
+      if (contextToAnalyze.length < 20) {
+        console.log('ℹ️ Need more conversation to generate meaningful suggestions');
+        return;
+      }
+      
+      console.log('📊 Full conversation context:', contextToAnalyze);
+      
+      // Analyze conversation and generate contextual suggestions
+      const suggestions = analyzeConversationAndSuggest(contextToAnalyze);
+      
+      if (suggestions.length > 0) {
+        setBrainstormSuggestions(prev => {
+          // Add only new, non-duplicate suggestions
+          const newSuggestions = suggestions.filter(newSug => 
+            !prev.some(existingSug => 
+              existingSug.toLowerCase().includes(newSug.toLowerCase().substring(0, 20))
+            )
+          );
+          
+          if (newSuggestions.length > 0) {
+            console.log('✅ Generated contextual suggestions:', newSuggestions);
+            return [...prev, ...newSuggestions];
+          }
+          return prev;
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to generate contextual AI:', error);
+    }
+  };
+
+  // Intelligent conversation analysis for brainstorming
+  const analyzeConversationAndSuggest = (conversationText) => {
+    const text = conversationText.toLowerCase();
+    let suggestions = [];
+    
+    // Problem identification patterns
+    if (text.includes('problem') || text.includes('issue') || text.includes('challenge')) {
+      suggestions.push('Let\'s break this problem down into smaller, more manageable parts');
+      suggestions.push('What if we approached this from a completely different angle?');
+      suggestions.push('Has anyone tried a similar solution in a different context?');
+    }
+    
+    // Stuck/blocked conversation patterns
+    if (text.includes('stuck') || text.includes('blocked') || text.includes('don\'t know')) {
+      suggestions.push('What would happen if we removed all current constraints?');
+      suggestions.push('Let\'s list 3 crazy ideas first, then work backwards to practical ones');
+      suggestions.push('Who else has solved something similar? Can we adapt their approach?');
+    }
+    
+    // Decision-making patterns
+    if (text.includes('decide') || text.includes('choose') || text.includes('option')) {
+      suggestions.push('Let\'s create a pros and cons matrix for each option');
+      suggestions.push('What would our users/customers prefer and why?');
+      suggestions.push('Which option gives us the most flexibility for future changes?');
+    }
+    
+    // Innovation/creativity patterns
+    if (text.includes('innovative') || text.includes('creative') || text.includes('new idea')) {
+      suggestions.push('What would this look like if we designed it from scratch today?');
+      suggestions.push('How would a completely different industry approach this?');
+      suggestions.push('What emerging technologies could we leverage here?');
+    }
+    
+    // Business/strategy patterns
+    if (text.includes('business') || text.includes('strategy') || text.includes('revenue')) {
+      suggestions.push('How does this align with our core business objectives?');
+      suggestions.push('What would happen if we made this our top priority for 30 days?');
+      suggestions.push('Could we test this with a small pilot group first?');
+    }
+    
+    // Team/collaboration patterns
+    if (text.includes('team') || text.includes('collaborate') || text.includes('together')) {
+      suggestions.push('Which team members have expertise we haven\'t tapped into yet?');
+      suggestions.push('How can we get more diverse perspectives on this?');
+      suggestions.push('What would success look like from each team member\'s viewpoint?');
+    }
+    
+    // User/customer patterns
+    if (text.includes('user') || text.includes('customer') || text.includes('client')) {
+      suggestions.push('Let\'s role-play as different types of users - what would they want?');
+      suggestions.push('What user pain point are we really trying to solve here?');
+      suggestions.push('How can we get direct feedback from users on this idea?');
+    }
+    
+    // Time/urgency patterns
+    if (text.includes('deadline') || text.includes('urgent') || text.includes('quickly')) {
+      suggestions.push('What\'s the minimum viable version we could ship right now?');
+      suggestions.push('Which parts can we parallel-process to save time?');
+      suggestions.push('What would we cut if we only had half the time?');
+    }
+    
+    // General conversation flow suggestions
+    if (suggestions.length === 0) {
+      // Analyze recent conversation sentiment and direction
+      if (text.includes('what') || text.includes('how')) {
+        suggestions.push('Let\'s explore 3 different approaches to this question');
+        suggestions.push('What assumptions are we making that we should challenge?');
+      } else if (text.includes('think') || text.includes('feel')) {
+        suggestions.push('What evidence would support or contradict this thinking?');
+        suggestions.push('How might someone with the opposite view respond?');
+      } else {
+        suggestions.push('What\'s the next logical step we should explore?');
+        suggestions.push('Are there any alternative perspectives we haven\'t considered?');
+        suggestions.push('How can we test this idea quickly and cheaply?');
+      }
+    }
+    
+    // Limit to 2-3 most relevant suggestions
+    return suggestions.slice(0, 3);
+  };
+
+  // Manual trigger for additional brainstorming suggestions
+  const generateAIBrainstormingSuggestions = async () => {
+    const fullConversation = conversationHistory.map(msg => msg.text).join(' ');
+    if (fullConversation) {
+      await generateContextualAI(fullConversation);
     }
   };
 
