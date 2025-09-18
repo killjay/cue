@@ -95,7 +95,14 @@ function App() {
         
         // Check if we're in a meeting
         if (configResponse.runningContext === 'inMeeting') {
-          await initializeMeetingFeatures();
+          console.log('✅ Detected inMeeting context, initializing meeting features...');
+          try {
+            await initializeMeetingFeatures();
+            console.log('✅ Meeting features initialized successfully');
+          } catch (meetingError) {
+            console.error('❌ Failed to initialize meeting features:', meetingError);
+            setRunningContext('inMeeting (Meeting API Error)');
+          }
         } else {
           // Set demo mode when not in meeting
           setRunningContext('Demo Mode - Not in Zoom Meeting');
@@ -113,13 +120,19 @@ function App() {
   // Initialize meeting-specific features
   const initializeMeetingFeatures = async () => {
     try {
+      console.log('🔧 Starting meeting features initialization...');
+      
       // Get meeting context
+      console.log('📋 Getting meeting context...');
       const meetingContextResponse = await zoomSdk.getMeetingContext();
+      console.log('📋 Meeting context response:', meetingContextResponse);
       setMeetingContext(meetingContextResponse);
       setIsMeetingConnected(true);
       
       // Get user context
+      console.log('👤 Getting user context...');
       const userContextResponse = await zoomSdk.getUserContext();
+      console.log('👤 User context response:', userContextResponse);
       setUserContext(userContextResponse);
       
       // Get meeting participants (if host/co-host)
